@@ -1,16 +1,16 @@
 #include "ofxACNSender.h"
 
-#ifdef WIN32
-#include <iphlpapi.h>
-#include <codecvt>
-#else
-#include <ifaddrs.h>
-#endif
+unsigned ofxACNSender::portOffset = 0;
 
-void ofxACNSender::setup(std::string addr, bool bCast)
+ofxACNSender::~ofxACNSender()
+{
+	localSocket.close();
+}
+
+void ofxACNSender::setup(std::string addr)//, bool bCast)
 {
 	ipAddress = addr;
-	bMcast = bCast;
+	//bMcast = bCast;
 	m_iRedMod = m_iGreenMod = m_iBlueMod = 255;
 	m_fGamma = 1.0f;
 	RecalculateGamma();
@@ -18,7 +18,6 @@ void ofxACNSender::setup(std::string addr, bool bCast)
 	setPriority(200); // Default top priority
 	setPacketUniverse(1);
 	connectUDP();
-
 }
 
 void ofxACNSender::update()
@@ -196,23 +195,30 @@ ofColor ofxACNSender::setGamma(ofColor in) const
 
 }
 
-void ofxACNSender::connectUDP()
+void ofxACNSender::connectUDP(unsigned localPort)
 {
-	delete[] pAddr;
-	pAddr = new char[ipAddress.length() + 1];
-	strcpy(pAddr, ipAddress.c_str());
-
-	udp.Create();
-	udp.SetEnableBroadcast(bMcast);
-	udp.SetReuseAddress(true);
-	udp.SetNonBlocking(true);
-	udp.SetSendBufferSize(4096);
-	udp.SetTimeoutSend(1);
-	if (bMcast) {
-		udp.ConnectMcast(pAddr, destPort);
+	// for now ignore multicast
+	if (localSocketBound) localSocket.close();
+	try
+	{
+		destinationAddress = Poco::Net::SocketAddress(ipAddress, DESTINATION_PORT);
 	}
-	else {
-		udp.Connect(pAddr, destPort);
+	catch (Poco::Exception& e)
+	{
+		ofLogError() << "Could not create destination address: " << ipAddress;
+	}
+
+	if (localPort == 0) localPort = LOCAL_PORT_START + portOffset++;
+	Poco::Net::SocketAddress localAddress(Poco::Net::IPAddress(), localPort);
+
+	try
+	{
+		localSocket.bind(localAddress);
+		localSocketBound = true;
+	}
+	catch (Poco::Exception& e)
+	{
+		ofLogError() << "Could not bind to local port: " << localPort;
 	}
 }
 
@@ -230,7 +236,8 @@ void ofxACNSender::sendDMX()
 		// Handle exceptions
 		try {
 			sac_packet.at(111) = dataPacket.universeSequenceNum;
-			udp.SendAll(sac_packet.data(), packet_length);
+			localSocket.sendTo(sac_packet.data(), sac_packet.size(), destinationAddress);
+			//udp.SendAll(sac_packet.data(), packet_length);
 			dataPacket.universeSequenceNum = dataPacket.universeSequenceNum + 1;
 		}
 		catch (std::exception& e) {

@@ -14,11 +14,18 @@
 #pragma once
 
 #include "ofMain.h"
-#include "ofxUDPManager.h"
+#include <Poco/Net/DatagramSocket.h>
+#include <Poco/Net/SocketAddress.h>
 
 class ofxACNSender {
 public:
-	void setup(std::string addr, bool mCast = false);
+	static constexpr unsigned LOCAL_PORT_START = 7777;
+	static constexpr unsigned DESTINATION_PORT = 5568;
+
+	~ofxACNSender();
+
+	// NM: implement poco multicast later
+	void setup(std::string addr);//, bool mCast = false);
 	void update();
 
 	// Return next Universe/Channel
@@ -39,7 +46,7 @@ private:
 
 	inline ofColor setGamma(ofColor in) const;
 
-	void connectUDP();
+	void connectUDP(unsigned localPort = 0);
 	void sendDMX();
 	void setLengthFlags();
 	void setPacketUniverse(int universe);
@@ -98,17 +105,19 @@ private:
 		The range for multicast addresses is from
 		224.0.0.0 to 239.255.255.255
 	*/
-	bool bMcast = false;
+	// NM: implement Poco multicast later
+	//bool bMcast = false;
 	bool loggedException = false;
 
 	int packet_length = 638; // Length when all 512 DMX channels are sent
-	int destPort = 5568;     // Default port for sACN protocol!
 	int priority = 100;
 
-	char* pAddr;
 	std::string ipAddress;
 
-	ofxUDPManager udp;
+	static unsigned portOffset;
+	Poco::Net::DatagramSocket localSocket;
+	Poco::Net::SocketAddress destinationAddress;
+	bool localSocketBound{ false };
 
 	std::map<int, UniverseData> universePackets;
 
